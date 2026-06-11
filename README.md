@@ -43,5 +43,5 @@ Bạn có thể tự mở Script Editor của Tampermonkey để thay đổi cá
 - Tự động xóa dọn bộ nhớ các Quiz cũ quá 30 ngày (Stale Days Clean Up) để trình duyệt không bị đầy RAM.
 
 ---
-**Phát triển bởi:** Lê Ngọc Tường
-**Phiên bản hiện tại:** 4.0
+**Phát triển bởi:** [Lê Ngọc Tường](https://www.facebook.com/ngtu.ong14.11)
+**Phiên bản hiện tại:** 4.0 (Bản Quyền Đầy Đủ)
