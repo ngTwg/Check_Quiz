@@ -393,6 +393,18 @@
     }
     return null;
   }
+  function isOpenCloseIdentical(text) {
+    if (!text) return false;
+    const parts = text.split(/[|;\n]|\s+-\s+/);
+    if (parts.length >= 2) {
+      const t1 = parseDeadline(parts[0]);
+      const t2 = parseDeadline(parts[1]);
+      if (t1 && t2 && t1 === t2) {
+        return true;
+      }
+    }
+    return false;
+  }
   function parseActivityStatus(doc, url) {
     let status = 'pending';
     let detail = '';
@@ -504,6 +516,10 @@
       color = 0xf59e0b; 
       const mins = quiz.uncompletedChecksCount;
       descSuffix = `⚠️ **Bạn chưa hoàn thành bài này!** (Đã nhắc nhở trong ${mins} phút qua)`;
+    } else if (triggerType === 'UPDATE') {
+      titleLabel = quiz.type === 'quiz' ? '🔄 CẬP NHẬT THỜI HẠN QUIZ' : '🔄 CẬP NHẬT THỜI HẠN BÀI TẬP';
+      color = 0x3b82f6; 
+      descSuffix = `Trạng thái: **${quiz.detail || 'Chưa làm'}**\n⚠️ **Thời hạn đã được cập nhật mới!**`;
     }
     const embed = {
       title:       `[${titleLabel}] ${quiz.name}`,
@@ -671,13 +687,35 @@
           console.error('[Monitor] Error parsing activity item:', err);
         }
       });
+      activitiesToProcess.forEach((act) => {
+        const existing = seenMap[act.id];
+        if (existing) {
+          const oldDeadline = (existing.deadline || '').trim();
+          const newDeadline = (act.deadline || '').trim();
+          if (oldDeadline !== newDeadline) {
+            console.log(`[Monitor] Phát hiện thay đổi thời hạn cho ${act.name}: '${oldDeadline}' -> '${newDeadline}'`);
+            existing.deadline = newDeadline;
+            existing.status = 'pending';
+            existing.detail = 'Cập nhật thời hạn';
+            existing.uncompletedChecksCount = 0;
+            existing.lastDetailCheck = 0;
+            existing.isUpdated = true;
+            saveState();
+          }
+        }
+      });
       for (const act of activitiesToProcess) {
         try {
           const deadlineTime = parseDeadline(act.deadline);
           const isPast = deadlineTime && deadlineTime < Math.floor(Date.now() / 1000);
           const isNew = !seenMap[act.id];
-          const isPending = seenMap[act.id] && seenMap[act.id].status !== 'completed';
-          if (isNew || isPending) {
+          const existing = seenMap[act.id];
+          const isPending = existing && existing.status !== 'completed';
+          const isUpdated = existing && existing.isUpdated;
+          const isStaleCompleted = existing && existing.status === 'completed' && 
+                                   (existing.detail === 'Đã hết hạn' || existing.detail === 'Trùng thời gian mở/đóng') &&
+                                   (Date.now() - (existing.lastDetailCheck || 0) > 15 * 60 * 1000);
+          if (isNew || isPending || isUpdated || isStaleCompleted) {
             const res = await fetch(act.url, { cache: 'no-store' });
             const htmlText = await res.text();
             const parser = new DOMParser();
@@ -693,11 +731,17 @@
                 type: act.type,
                 status: status,
                 detail: detail,
-                uncompletedChecksCount: 0
+                uncompletedChecksCount: 0,
+                lastDetailCheck: Date.now()
               };
               saveState();
               if (status === 'completed') {
                 await sendQuizWebhook(seenMap[act.id], 'COMPLETED');
+              } else if (isOpenCloseIdentical(act.deadline)) {
+                seenMap[act.id].status = 'completed';
+                seenMap[act.id].detail = 'Trùng thời gian mở/đóng';
+                saveState();
+                await sendQuizWebhook(seenMap[act.id], 'NEW');
               } else if (isPast) {
                 seenMap[act.id].status = 'completed';
                 seenMap[act.id].detail = 'Đã hết hạn';
@@ -717,25 +761,69 @@
                 await sendQuizWebhook(seenMap[act.id], 'NEW');
               }
             } else {
-              const oldStatus = seenMap[act.id].status;
-              if (status === 'completed') {
-                seenMap[act.id].status = 'completed';
-                seenMap[act.id].detail = detail;
-                saveState();
-                if (oldStatus !== 'completed') {
-                  await sendQuizWebhook(seenMap[act.id], 'COMPLETED');
+              existing.lastDetailCheck = Date.now();
+              if (existing.isUpdated) {
+                existing.isUpdated = false;
+                if (status === 'completed') {
+                  existing.status = 'completed';
+                  existing.detail = detail;
+                  saveState();
+                  await sendQuizWebhook(existing, 'COMPLETED');
+                } else if (isOpenCloseIdentical(act.deadline)) {
+                  existing.status = 'completed';
+                  existing.detail = 'Trùng thời gian mở/đóng';
+                  saveState();
+                  await sendQuizWebhook(existing, 'UPDATE');
+                } else if (isPast) {
+                  existing.status = 'completed';
+                  existing.detail = 'Đã hết hạn';
+                  saveState();
+                  await sendQuizWebhook(existing, 'EXPIRED');
+                } else {
+                  existing.status = status;
+                  existing.detail = detail;
+                  saveState();
+                  await sendQuizWebhook(existing, 'UPDATE');
                 }
-              } else if (isPast) {
-                seenMap[act.id].status = 'completed';
-                seenMap[act.id].detail = 'Đã hết hạn';
-                saveState();
+              } else if (isStaleCompleted) {
+                const isStillIdentical = isOpenCloseIdentical(act.deadline);
+                if (status !== 'completed' && !isPast && !isStillIdentical) {
+                  existing.status = status;
+                  existing.detail = detail;
+                  existing.uncompletedChecksCount = 0;
+                  saveState();
+                  await sendQuizWebhook(existing, 'UPDATE');
+                } else {
+                  saveState();
+                }
               } else {
-                seenMap[act.id].status = status;
-                seenMap[act.id].detail = detail;
-                seenMap[act.id].uncompletedChecksCount = (seenMap[act.id].uncompletedChecksCount || 0) + 1;
-                saveState();
-                if (seenMap[act.id].uncompletedChecksCount % 5 === 0) {
-                  await sendQuizWebhook(seenMap[act.id], 'REMINDER');
+                const oldStatus = existing.status;
+                if (status === 'completed') {
+                  existing.status = 'completed';
+                  existing.detail = detail;
+                  saveState();
+                  if (oldStatus !== 'completed') {
+                    await sendQuizWebhook(existing, 'COMPLETED');
+                  }
+                } else if (isOpenCloseIdentical(act.deadline)) {
+                  existing.status = 'completed';
+                  existing.detail = 'Trùng thời gian mở/đóng';
+                  saveState();
+                } else if (isPast) {
+                  existing.status = 'completed';
+                  existing.detail = 'Đã hết hạn';
+                  saveState();
+                  if (oldStatus !== 'completed') {
+                    await sendQuizWebhook(existing, 'EXPIRED');
+                  }
+                } else {
+                  existing.status = status;
+                  existing.detail = detail;
+                  existing.uncompletedChecksCount = (existing.uncompletedChecksCount || 0) + 1;
+                  saveState();
+                  if (existing.uncompletedChecksCount % 5 === 0) {
+                    await sendQuizWebhook(existing, 'REMINDER');
+                  }
                 }
               }
             }
