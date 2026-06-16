@@ -3,7 +3,7 @@
 // @namespace    http://tampermonkey.net/
 // @version      1.0
 // @description  Tối ưu hóa Moodle HCMUS: Lột bỏ giao diện thừa, animation rườm rà, tập trung 100% tốc độ để vào bài học/thi nhanh nhất. Auto-Login. (Phiên bản TEST)
-// @author       Lê Ngọc Tường
+// @author       You
 // @match        *://courses.hcmus.edu.vn/*
 // @match        *://moodle.hcmus.edu.vn/*
 // @icon         https://api.dicebear.com/7.x/bottts/png?seed=MoodleFast&backgroundColor=00aadd

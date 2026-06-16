@@ -525,8 +525,8 @@
       title:       `[${titleLabel}] ${quiz.name}`,
       url:         quiz.url,
       color:       color,
-      description: `**${quiz.name}**\n${timeDisplay}\n\n${descSuffix}\n\nLink: ${quiz.url}\n\n👤 **Tác giả**: [Lê Ngọc Tường](https://www.facebook.com/ngtu.ong14.11)`,
-      footer:      { text: `Moodle Monitor | Tác giả: Lê Ngọc Tường | Phát hiện: ${quiz.detectedAt}` },
+      description: `**${quiz.name}**\n${timeDisplay}\n\n${descSuffix}\n\nLink: ${quiz.url}`,
+      footer:      { text: `Moodle Monitor | Phát hiện: ${quiz.detectedAt}` },
       timestamp:   new Date().toISOString(),
     };
     return sendCombinedWebhook(embed, quiz.url);
@@ -536,9 +536,9 @@
     const embed = {
       title: '🚨 SESSION EXPIRED / LOGGED OUT',
       color: 0xf59e0b,
-      description: 'Moodle session has expired or logged out. Microsoft auto-login triggered.\n\n👤 **Tác giả**: [Lê Ngọc Tường](https://www.facebook.com/ngtu.ong14.11)',
+      description: 'Moodle session has expired or logged out. Microsoft auto-login triggered.',
       url: `${location.origin}/login/index.php`,
-      footer:      { text: 'Moodle Monitor | Tác giả: Lê Ngọc Tường' },
+      footer:      { text: 'Moodle Monitor' },
       timestamp: new Date().toISOString(),
     };
     sendCombinedWebhook(embed, null);
@@ -548,8 +548,8 @@
     const embed = {
       title: '✅ MOODLE LOGGED IN SUCCESSFULLY',
       color: 0x10b981,
-      description: `Moodle has logged in successfully and resumed monitoring.\nTarget Page: ${location.href}\n\n👤 **Tác giả**: [Lê Ngọc Tường](https://www.facebook.com/ngtu.ong14.11)`,
-      footer:      { text: 'Moodle Monitor | Tác giả: Lê Ngọc Tường' },
+      description: `Moodle has logged in successfully and resumed monitoring.\nTarget Page: ${location.href}`,
+      footer:      { text: 'Moodle Monitor' },
       timestamp: new Date().toISOString(),
     };
     sendCombinedWebhook(embed, null);

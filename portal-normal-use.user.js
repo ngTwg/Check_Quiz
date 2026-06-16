@@ -3,7 +3,7 @@
 // @namespace    http://tampermonkey.net/
 // @version      1.0
 // @description  Bản dùng bình thường: Lột sạch màu sắc, ảnh rác, hiệu ứng nặng nề để tăng tốc nhưng GIỮ LẠI toàn bộ tính năng và Menu. Tự động đăng nhập siêu tốc. (Phiên bản TEST)
-// @author       Lê Ngọc Tường
+// @author       You
 // @match        *://new-portal1.hcmus.edu.vn/*
 // @match        *://new-portal2.hcmus.edu.vn/*
 // @match        *://new-portal3.hcmus.edu.vn/*
