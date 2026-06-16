@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         Giam Sat Quiz Moodle
+// @name         Giam Sat Quiz Moodle (Alarm Edition)
 // @namespace    http://tampermonkey.net/
-// @version      4.0
-// @description  Tu dong phat hien quiz Moodle moi, han chot va het han session khong can reload (co dem nguoc, tam dung, tu dong dang nhap, chuyen huong, thong bao Discord/Telegram/Pushbullet)
+// @version      4.0-alarm
+// @description  Tu dong phat hien quiz Moodle moi, co chuong bao thuc keu lien tuc (sawtooth wave) cho den khi tat hoac het han quiz
 // @author       You
 // @match        *://courses.hcmus.edu.vn/*
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=moodle.org
@@ -41,6 +41,142 @@
   let countdownTimer  = null;
   let secondsRemaining = CHECK_INTERVAL_MS / 1000;
   let keepRedUntil = 0;
+
+  // Web Audio Alarm Engine
+  let alarmAudioContext = null;
+  let alarmInterval = null;
+  let alarmOverlay = null;
+
+  function playAnnoyingAlarm(deadlineTimestamp) {
+    if (alarmInterval) return; // Already running
+    try {
+      alarmAudioContext = new (window.AudioContext || window.webkitAudioContext)();
+    } catch (e) {
+      console.error('[Alarm] Web Audio API not supported:', e);
+      return;
+    }
+
+    alarmInterval = setInterval(() => {
+      // Check if deadline expired to auto-stop
+      if (deadlineTimestamp && (Math.floor(Date.now() / 1000) >= deadlineTimestamp)) {
+        console.log('[Alarm] Quiz expired. Auto-stopping alarm.');
+        stopAnnoyingAlarm();
+        return;
+      }
+
+      try {
+        if (!alarmAudioContext) return;
+        if (alarmAudioContext.state === 'suspended') {
+          alarmAudioContext.resume();
+        }
+        
+        // Annoying dual-tone siren using sawtooth waves
+        const now = alarmAudioContext.currentTime;
+        
+        const osc1 = alarmAudioContext.createOscillator();
+        const osc2 = alarmAudioContext.createOscillator();
+        const gainNode = alarmAudioContext.createGain();
+
+        osc1.type = 'sawtooth';
+        osc2.type = 'square';
+
+        // Grating sound sweeping frequency
+        const sweepFreq = 800 + Math.sin(Date.now() / 80) * 400;
+        osc1.frequency.setValueAtTime(sweepFreq, now);
+        osc2.frequency.setValueAtTime(sweepFreq * 1.5, now);
+
+        gainNode.gain.setValueAtTime(0.8, now); // Max volume 80% (safety but annoying)
+        gainNode.gain.exponentialRampToValueAtTime(0.01, now + 0.35);
+
+        osc1.connect(gainNode);
+        osc2.connect(gainNode);
+        gainNode.connect(alarmAudioContext.destination);
+
+        osc1.start(now);
+        osc2.start(now);
+        osc1.stop(now + 0.38);
+        osc2.stop(now + 0.38);
+      } catch (err) {
+        console.error('[Alarm] Error playing synthesizer tone:', err);
+      }
+    }, 150);
+  }
+
+  function stopAnnoyingAlarm() {
+    if (alarmInterval) {
+      clearInterval(alarmInterval);
+      alarmInterval = null;
+    }
+    if (alarmAudioContext) {
+      try {
+        alarmAudioContext.close();
+      } catch (e) {}
+      alarmAudioContext = null;
+    }
+    if (alarmOverlay) {
+      try {
+        alarmOverlay.remove();
+      } catch (e) {}
+      alarmOverlay = null;
+    }
+  }
+
+  function showAlarmOverlay(quizName, quizUrl) {
+    if (document.getElementById('moodle-watcher-alarm-overlay')) return;
+    
+    alarmOverlay = document.createElement('div');
+    alarmOverlay.id = 'moodle-watcher-alarm-overlay';
+    alarmOverlay.style.cssText = `
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      background: rgba(239, 68, 68, 0.95);
+      z-index: 9999999;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      font-family: system-ui, -apple-system, sans-serif;
+      animation: flashRed 0.4s infinite alternate;
+    `;
+    
+    if (!document.getElementById('alarm-animation-style')) {
+      const style = document.createElement('style');
+      style.id = 'alarm-animation-style';
+      style.innerHTML = `
+        @keyframes flashRed {
+          from { background: rgba(239, 68, 68, 0.95); }
+          to { background: rgba(185, 28, 28, 0.98); }
+        }
+      `;
+      document.head.appendChild(style);
+    }
+    
+    alarmOverlay.innerHTML = `
+      <div style="text-align: center; max-width: 600px; padding: 20px;">
+        <h1 style="font-size: 48px; margin-bottom: 20px; text-shadow: 0 4px 10px rgba(0,0,0,0.3);">🚨 CÓ QUIZ MỚI! 🚨</h1>
+        <p style="font-size: 24px; margin-bottom: 30px; line-height: 1.5; font-weight: 600;">${quizName}</p>
+        <div style="display: flex; gap: 20px; justify-content: center;">
+          <a href="${quizUrl}" target="_blank" id="alarm-go-btn" style="background: white; color: #b91c1c; padding: 15px 30px; border-radius: 8px; font-weight: bold; text-decoration: none; font-size: 18px; box-shadow: 0 4px 15px rgba(0,0,0,0.2);">VÀO LÀM BÀI</a>
+          <button id="alarm-dismiss-btn" style="background: #1f2937; color: white; border: none; padding: 15px 30px; border-radius: 8px; font-weight: bold; cursor: pointer; font-size: 18px; box-shadow: 0 4px 15px rgba(0,0,0,0.2);">TẮT BÁO THỨC</button>
+        </div>
+      </div>
+    `;
+    
+    document.body.appendChild(alarmOverlay);
+    
+    document.getElementById('alarm-dismiss-btn').addEventListener('click', () => {
+      stopAnnoyingAlarm();
+    });
+    
+    document.getElementById('alarm-go-btn').addEventListener('click', () => {
+      stopAnnoyingAlarm();
+    });
+  }
+
   function saveState() {
     const cutoff = Date.now() - STALE_DAYS * 86400000;
     Object.keys(seenMap).forEach((id) => {
@@ -749,9 +885,11 @@
                 await sendQuizWebhook(seenMap[act.id], 'EXPIRED');
               } else {
                 foundNew = true;
-                try {
-                  new Audio('https://actions.google.com/sounds/v1/alarms/beep_short.ogg').play().catch(() => {});
-                } catch {}
+                
+                // Ring annoying loop alarm
+                playAnnoyingAlarm(deadlineTime);
+                showAlarmOverlay(act.name, act.url);
+
                 GM_notification({
                   title:   act.type === 'quiz' ? 'New Quiz Found' : 'New Assignment Found',
                   text:    `${act.name}${act.deadline ? '\n' + act.deadline : ''}`,
@@ -895,7 +1033,7 @@
     if (!badge) return;
     const count = Object.keys(seenMap).length;
     const isPaused = GM_getValue('moodle_quiz_paused', false);
-    const titleText = isPaused ? 'Moodle Watcher v3.6 [PAUSED]' : 'Moodle Watcher v3.6';
+    const titleText = isPaused ? 'Moodle Watcher Alarm [PAUSED]' : 'Moodle Watcher Alarm';
     badge.innerHTML =
       `<div style="font-weight:600;margin-bottom:2px;color:inherit;">${titleText}</div>` +
       `<div style="font-size:11px;opacity:0.85;">Tracked: ${count} items</div>` +
@@ -985,9 +1123,9 @@
     badge.addEventListener('click', () => {
       const currentPaused = GM_getValue('moodle_quiz_paused', false);
       const action = prompt(
-        'Moodle Watcher Menu:\n' +
+        'Moodle Watcher Alarm Menu:\n' +
         `1 - ${currentPaused ? '▶️ Resume Watcher' : '⏸️ Pause Watcher'}\n` +
-        '2 - Send Test Webhook\n' +
+        '2 - Send Test Webhook & Trigger Alarm\n' +
         '3 - Scan Now\n' +
         '4 - View Tracked Items (Console)\n' +
         '5 - Reset Tracked Items\n' +
@@ -1006,8 +1144,12 @@
           scanForQuizzes();
         }
       } else if (action === '2') {
+        // Trigger Test Alarm & Webhook
+        playAnnoyingAlarm(Math.floor(Date.now() / 1000) + 30); // 30s test
+        showAlarmOverlay('TEST QUIZ ALARM', '#');
+
         if (!hasAnyNotificationChannel()) {
-          showToast('No notification channel configured', 'error');
+          showToast('Alarm triggered. No notification channel configured', 'warning');
         } else {
           const embed = {
             title:       'Test Webhook Successful',
@@ -1024,7 +1166,7 @@
             }, false);
           }
           dispatchToExtraChannels(embed, null);
-          showToast('Test notification sent to all channels', 'success');
+          showToast('Test notification sent & Alarm triggered', 'success');
         }
       } else if (action === '3') {
         scanForQuizzes();
