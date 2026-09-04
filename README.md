@@ -1,46 +1,55 @@
-# Giam Sat Moodle (Moodle Monitor v4.0)
+# Bộ Công Cụ Userscripts (Automation & Monitoring Suite)
 
-## 📌 Giới thiệu
-**Moodle Monitor v4.0** là script Tampermonkey tối ưu và mạnh mẽ nhất dành riêng cho các hệ thống Moodle (`courses.hcmus.edu.vn` và `moodle.hcmus.edu.vn`). 
-Được thiết kế để chạy ngầm, script tự động săn các Bài tập (Assignment) và Quiz mới, phát hiện các thay đổi hạn chót (Deadline) và trạng thái nộp bài. Khi có sự kiện, nó sẽ chụp lại ảnh màn hình bằng `html2canvas` và báo cáo đồng loạt qua đa nền tảng Webhook (Discord, Telegram, Pushbullet) theo thời gian thực!
-
-## ✨ Tính năng nổi bật
-1. **Auto-Detect Background (Quét ngầm không cần F5):**
-   - Theo dõi các Bài tập và Quiz mới xuất hiện.
-   - Check trạng thái cá nhân hóa: "Chưa làm", "Đang làm dở", "Hoàn thành", "Quá hạn".
-2. **Session Survival & Auto-Login:**
-   - Cảnh báo tức thời nếu phiên (Session) Moodle bị hết hạn.
-   - Tự động click chuyển hướng Đăng nhập thông qua nút Microsoft Account để duy trì luồng theo dõi.
-3. **Capture & Smart Screenshot:**
-   - Ứng dụng iframe cô lập để gọi render lại trang bài tập và chụp ảnh màn hình (Screenshot). 
-   - Hình ảnh được tự động đính kèm vào trong các thông báo Telegram và Discord.
-4. **Hệ Thống Phân Tán Báo Cáo Đa Kênh:**
-   - **Discord:** Embeds tuyệt đẹp, phân màu theo trạng thái (Xanh = Đã nộp, Đỏ = Mới ra, Vàng = Nhắc nhở, Xám = Hết hạn).
-   - **Telegram:** Gửi Photo caption siêu nhanh tới thiết bị di động của bạn.
-   - **Pushbullet:** Đẩy Notification popup cực nhạy.
-5. **Interactive Floating UI:**
-   - Thanh trạng thái nổi góc dưới màn hình, hiển thị tiến độ quét và đếm ngược tự động.
-   - Bảng điều khiển tích hợp: Tạm dừng (`Pause`), Tiếp tục (`Resume`), và Khôi phục cache (`Reset`).
-
-## ⚙️ Hướng dẫn cài đặt
-1. Tải và cài đặt tiện ích mở rộng [Tampermonkey](https://www.tampermonkey.net/).
-2. Nhấn vào biểu tượng Tampermonkey -> **Create a new script...**
-3. Copy toàn bộ nội dung của tệp `giam-sat-moodle.user.js` nằm trong thư mục này và dán vào, sau đó nhấn `Ctrl + S` để lưu lại.
-4. Cấp quyền truy cập `Cross-Origin Request` (Allow Always) khi có popup yêu cầu ở lần chạy đầu tiên trên trang Moodle.
-
-## 🔧 Hướng dẫn tùy chỉnh cấu hình (Config)
-Bạn có thể tự mở Script Editor của Tampermonkey để thay đổi các thông số ở mục `CONFIG`:
-- **Webhooks URL:** 
-  - `DISCORD_WEBHOOK_URL`: (Tùy chọn) Gắn Webhook Channel Discord.
-  - `TELEGRAM_BOT_TOKEN` & `TELEGRAM_CHAT_ID`: (Tùy chọn) Điền token Bot Father và User ID của bạn.
-  - `PUSHBULLET_TOKEN`: (Tùy chọn) API Token của ứng dụng Pushbullet.
-- **Tính toán thời gian quét:**
-  - `CHECK_INTERVAL_MS`: Thời gian giãn cách giữa các lần Refresh (Khuyên dùng: 60000ms = 1 phút).
-
-## 🛡 Tính năng bảo vệ và Độ ổn định
-- Tích hợp hàng đợi Webhook (Queue System) kết hợp `RETRY_DELAY_MS` để chặn việc gửi spam nhiều tin một lúc gây Rate Limit từ API bên thứ 3.
-- Xử lý Request HTML tĩnh `fetch(url, { cache: 'no-store' })` giảm thiểu tối đa áp lực tải lên Server nhà trường.
-- Tự động xóa dọn bộ nhớ các Quiz cũ quá 30 ngày (Stale Days Clean Up) để trình duyệt không bị đầy RAM.
+Kho lưu trữ mã nguồn mở các Userscript (Tampermonkey) hỗ trợ học tập, làm việc và tương tác tự động trên nền tảng Web.
 
 ---
-**Phiên bản hiện tại:** 4.0
+
+## 📦 Danh sách công cụ
+
+### 1. Giám Sát Moodle (`giam-sat-moodle.user.js` & `giam-sat-moodle-alarm.user.js`)
+- **Mục đích**: Tự động phát hiện Bài tập (Assignment) và Quiz mới, theo dõi hạn chót (Deadline), cảnh báo hết hạn session và tự động đăng nhập duy trì kết nối trên Moodle HCMUS (`courses.hcmus.edu.vn`, `moodle.hcmus.edu.vn`).
+- **Phiên bản Alarm**: Tích hợp chuông báo thức liên tục (sawtooth wave qua Web Audio API) kèm popup cảnh báo trực quan cho đến khi được tắt hoặc hết hạn quiz.
+- **Tính năng**:
+  - Quét ngầm nền không cần F5 trang.
+  - Chụp ảnh màn hình bài tập/quiz bằng iframe và `html2canvas`.
+  - Báo cáo đa kênh: Discord Webhook, Telegram Bot, Pushbullet.
+  - Floating UI: Thanh điều khiển nổi đếm ngược thời gian quét, nút Tạm dừng (Pause), Tiếp tục (Resume), Đặt lại cache (Reset).
+
+### 2. Hỗ Trợ Quiz Moodle (`ho-tro-quiz-moodle.user.js`)
+- **Mục đích**: Hỗ trợ giải bài tập trắc nghiệm và câu hỏi quiz Moodle song song qua AI.
+- **Tính năng**:
+  - Đọc đề bài, hình ảnh câu hỏi, các lựa chọn đáp án tự động.
+  - Mở nhiều tab xử lý song song để tiết kiệm thời gian.
+  - Tự động điền đáp án an toàn, có cơ chế xác nhận trước khi nộp.
+  - Toast thông báo trạng thái trực quan.
+
+### 3. Tự Động Đăng Ký Học Phần (`auto-dang-ky-hoc-phan.user.js`)
+- **Mục đích**: Tự động nhận diện môn học, ưu tiên xếp lớp và đăng ký học phần trên Portal trường (`new-portal*.hcmus.edu.vn`).
+- **Tính năng**:
+  - Cơ chế ưu tiên lớp (Priority 1, Priority 2) dựa trên số lượng slot còn lại.
+  - Chế độ **Sniper Mode**: Tự động canh slot và refresh thông minh với backoff chống rate-limit khi các lớp mong muốn bị đầy.
+  - Tự động dừng để người dùng nhập CAPTCHA an toàn trước khi bấm xác nhận đăng ký.
+  - Thông báo kết quả ngay lập tức qua Discord, Telegram, Pushbullet.
+
+### 4. Facebook Auto Comment & Interaction Bot (`fb-auto-comment.user.js`)
+- **Mục đích**: Bot tự động tương tác và bình luận bài viết theo từ khóa trong nhóm Facebook.
+- **Tính năng**:
+  - Giao diện điều khiển nổi (Floating Panel) hiện đại, có thể thu nhỏ.
+  - Chia tách 2 pha: Tìm nút kích hoạt (Activator) và Điền nội dung vào composer (Opened Composer).
+  - Tự động phát hiện tạm khóa hoặc checkpoint để dừng bot an toàn.
+  - Cơ chế retry tối đa 3 lần cho mỗi bài viết, tránh lặp vô hạn.
+
+### 5. 9Router Auto Login (`9router-autologin.user.js`)
+- **Mục đích**: Tự động điền mật khẩu và đăng nhập trang quản trị 9Router trên `localhost:20128`.
+- **Tính năng**:
+  - Bypass React value tracker bằng prototype setter gốc.
+  - Tự động dừng interval khi phát hiện form đăng nhập đã unmount thành công.
+
+---
+
+## ⚙️ Hướng dẫn cài đặt chung
+
+1. Cài đặt tiện ích mở rộng [Tampermonkey](https://www.tampermonkey.net/) trên trình duyệt (Chrome, Edge, Firefox, Brave,...).
+2. Mở file script `.user.js` tương ứng trong thư mục này.
+3. Sao chép nội dung script, vào Tampermonkey -> **Tạo script mới** (Create a new script) -> Dán đè toàn bộ nội dung -> Nhấn **Ctrl + S** để lưu.
+4. Đối với các script có gửi thông báo (Discord, Telegram, Pushbullet), bạn có thể cấu hình token và URL webhook thông qua tab **Values** (Cài đặt lưu trữ) của script trong Tampermonkey hoặc điền vào biến cấu hình ở đầu file.

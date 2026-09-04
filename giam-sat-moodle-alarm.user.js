@@ -1,10 +1,11 @@
 // ==UserScript==
 // @name         Giam Sat Quiz Moodle (Alarm Edition)
 // @namespace    http://tampermonkey.net/
-// @version      4.0-alarm
+// @version      4.0.1-alarm
 // @description  Tu dong phat hien quiz Moodle moi, co chuong bao thuc keu lien tuc (sawtooth wave) cho den khi tat hoac het han quiz
 // @author       You
 // @match        *://courses.hcmus.edu.vn/*
+// @match        *://moodle.hcmus.edu.vn/*
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=moodle.org
 // @require      https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js
 // @grant        GM_notification
@@ -19,16 +20,54 @@
 
 (function () {
   'use strict';
-  const CHECK_INTERVAL_MS   = 1 * 60 * 1000;   
-  const WEBHOOK_URL         = '';   
-  const MAX_RETRY           = 3;                
-  const RETRY_DELAY_MS      = 5000;             
-  const WEBHOOK_COOLDOWN_MS = 2000;             
-  const STALE_DAYS          = 30;               
+
+  // Prevent script execution in iframes to avoid recursive alarm trigger / screenshot loop
+  if (window.top !== window.self) return;
+
+  // Safe fetch wrapper: falls back to GM_xmlhttpRequest if fetch is blocked by CSP or unavailable
+  function safeFetch(url, options) {
+    options = options || {};
+    return new Promise((resolve, reject) => {
+      const makeResponse = (res) => ({
+        ok: res.status >= 200 && res.status < 300,
+        status: res.status,
+        statusText: res.statusText || '',
+        url: res.finalUrl || url,
+        redirected: !!(res.finalUrl && res.finalUrl !== url),
+        text: () => Promise.resolve(res.responseText || ''),
+        json: () => Promise.resolve(JSON.parse(res.responseText || '{}')),
+      });
+      const xhr = {
+        method: options.method || 'GET',
+        url: url,
+        headers: options.headers || {},
+        data: options.body,
+        responseType: 'text',
+        onload: (res) => resolve(makeResponse(res)),
+        onerror: (err) => reject(err),
+      };
+      if (typeof fetch !== 'undefined') {
+        fetch(url, options).then(resolve).catch((err) => {
+          console.warn('[Monitor] fetch blocked, fallback GM_xhr:', err);
+          GM_xmlhttpRequest(xhr);
+        });
+      } else {
+        GM_xmlhttpRequest(xhr);
+      }
+    });
+  }
+
+  const CHECK_INTERVAL_MS   = 1 * 60 * 1000;
+  // GM_getValue fallbacks — configure via Tampermonkey Values tab (e.g. GM_setValue('webhook_url', 'https://...'))
+  const WEBHOOK_URL         = GM_getValue('webhook_url', '');
+  const MAX_RETRY           = 3;
+  const RETRY_DELAY_MS      = 5000;
+  const WEBHOOK_COOLDOWN_MS = 2000;
+  const STALE_DAYS          = 30;
   const SESSION_PING_KEY    = 'moodle_session_warned';
-  const TELEGRAM_BOT_TOKEN  = '';   
-  const TELEGRAM_CHAT_ID    = '';   
-  const PUSHBULLET_TOKEN    = '';   
+  const TELEGRAM_BOT_TOKEN  = GM_getValue('telegram_bot_token', '');
+  const TELEGRAM_CHAT_ID    = GM_getValue('telegram_chat_id', '');
+  const PUSHBULLET_TOKEN    = GM_getValue('pushbullet_token', '');   
   let seenMap = {};
   try {
     seenMap = JSON.parse(GM_getValue('moodle_quiz_seen_v2', '{}'));
@@ -49,6 +88,11 @@
 
   function playAnnoyingAlarm(deadlineTimestamp) {
     if (alarmInterval) return; // Already running
+    // Browser autoplay policy requires a user gesture; fallback to overlay/notification if none
+    if (typeof navigator !== 'undefined' && navigator.userActivation && !navigator.userActivation.hasBeenActive) {
+      console.log('[Alarm] No user activation yet; skipping audio, using overlay/notification.');
+      return;
+    }
     try {
       alarmAudioContext = new (window.AudioContext || window.webkitAudioContext)();
     } catch (e) {
@@ -171,10 +215,14 @@
     document.getElementById('alarm-dismiss-btn').addEventListener('click', () => {
       stopAnnoyingAlarm();
     });
-    
+
     document.getElementById('alarm-go-btn').addEventListener('click', () => {
       stopAnnoyingAlarm();
     });
+
+    // Extra fallback: ESC key dismisses alarm
+    const escHandler = (e) => { if (e.key === 'Escape') { stopAnnoyingAlarm(); document.removeEventListener('keydown', escHandler); } };
+    document.addEventListener('keydown', escHandler);
   }
 
   function saveState() {
@@ -251,7 +299,7 @@
         fetchOptions.headers = { 'Content-Type': 'application/json' };
         fetchOptions.body = JSON.stringify(payload);
       }
-      fetch(WEBHOOK_URL, fetchOptions)
+      safeFetch(WEBHOOK_URL, fetchOptions)
       .then(res => {
         console.log('[Monitor] Webhook status:', res.status);
         if (res.status === 429) {
@@ -321,6 +369,13 @@
         setTimeout(() => {
           try {
             const iframeDoc = iframe.contentWindow.document;
+            if (typeof html2canvas === 'undefined') {
+              // FIX: CDN bi chan -> truoc day nem ReferenceError, mat luon thong bao
+              console.warn('[Monitor] html2canvas khong kha dung -> bo qua anh chup iframe');
+              try { cleanup(); } catch (e) {}
+              try { triggerCallback(null); } catch (e) {}
+              return;
+            }
             html2canvas(iframeDoc.body, {
               useCORS: true,
               allowTaint: true,
@@ -369,14 +424,14 @@
       formData.append('chat_id', TELEGRAM_CHAT_ID);
       formData.append('caption', caption);
       formData.append('photo', blob, 'screenshot.png');
-      return fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendPhoto`, {
+      return safeFetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendPhoto`, {
         method: 'POST',
         body: formData
       })
       .then(res => console.log('[Monitor] Telegram sendPhoto status:', res.status))
       .catch(err => console.error('[Monitor] Telegram sendPhoto failed:', err));
     }
-    return fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
+    return safeFetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -493,6 +548,7 @@
     const timeRegex = /(\d{1,2})[:h](\d{2})(?:\s*(AM|PM))?/i;
     const dateVnRegex = /(\d{1,2})\s+tháng\s+(\d{1,2})(?:\s+năm|\s*,\s*)?\s+(\d{4})/i;
     const dateStdRegex = /(\d{1,2})[\/\.-](\d{1,2})[\/\.-](\d{4})/;
+    const dateEngRegex = /(\d{1,2})\s+(january|february|march|april|may|june|july|august|september|october|november|december)[a-z]*\s+(\d{4})/i;
     const timeMatch = targetText.match(timeRegex);
     const dateVnMatch = targetText.match(dateVnRegex);
     const dateStdMatch = targetText.match(dateStdRegex);
@@ -514,6 +570,11 @@
         day = parseInt(dateStdMatch[1], 10);
         month = parseInt(dateStdMatch[2], 10) - 1;
         year = parseInt(dateStdMatch[3], 10);
+      } else if (dateEngMatch) {
+        day = parseInt(dateEngMatch[1], 10);
+        const monthMap = { jan:0, feb:1, mar:2, apr:3, may:4, jun:5, jul:6, aug:7, sep:8, oct:9, nov:10, dec:11 };
+        month = monthMap[dateEngMatch[2].toLowerCase().slice(0, 3)];
+        year = parseInt(dateEngMatch[3], 10);
       } else {
         return null;
       }
